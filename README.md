@@ -1,0 +1,58 @@
+# FinderMinder
+
+A small macOS menu bar app that keeps Finder's **column view** columns wide
+enough to show long file names in full.
+
+Whenever you open a folder or move around in a column-view window, FinderMinder
+right-sizes each visible column to fit its longest name. It does this the same way you
+would by hand: it double-clicks the small resize grip (‖) at the bottom of each column
+divider. Then it puts your mouse pointer back where it was.
+
+## Build and install
+
+You need macOS 13 (Ventura) or later and the Xcode Command Line Tools
+(`xcode-select --install`).
+
+```bash
+./build-app.sh
+```
+
+```bash
+mv build/FinderMinder.app /Applications/ && open /Applications/FinderMinder.app
+```
+
+On first launch macOS asks you to allow FinderMinder in
+**System Settings → Privacy & Security → Accessibility**. Turn it on. FinderMinder needs this
+to read Finder's columns and to click their resize grips. FinderMinder starts working as soon
+as you allow it.
+
+> The build is ad-hoc signed. If you rebuild, macOS may treat it as a new app. In that case,
+> remove FinderMinder from the Accessibility list and add it again.
+
+## Menu
+
+| Item | What it does |
+| --- | --- |
+| Auto-Fit Column Widths | Turns automatic resizing on or off. |
+| Fit Columns Now | Resizes the frontmost Finder window's columns once. |
+| Launch at Login | Starts FinderMinder when you log in. The app must be in /Applications. |
+| Reset Grip Calibration | Searches for the grip position again. |
+| Copy Diagnostics | Copies what FinderMinder sees in the front Finder window to the clipboard. |
+
+## How it works / safety
+
+- FinderMinder only acts when Finder is the frontmost app and its focused window is in column view.
+- It skips a pass while you hold a mouse button or a modifier key, or while you rename a file.
+- It re-fits only when the window shows *different content*: a new folder, column or selection.
+  If you drag a column to a custom width, FinderMinder leaves that width alone until you navigate.
+- Before every click, it asks Accessibility which element is under that point. It clicks only
+  when that point is inside Finder's column browser and not on a file, name, icon, button or
+  scroll bar. So it never opens a file by mistake.
+- The first time it runs, it tries a few spots near the bottom of the column divider. When one
+  of them resizes a column, it saves that position and uses it from then on.
+
+## Troubleshooting
+
+If columns don't resize, first resize a column by hand so its name gets cut off. Then choose
+**Reset Grip Calibration** and then **Fit Columns Now**. If that doesn't help, choose
+**Copy Diagnostics** and paste the result into an issue.
