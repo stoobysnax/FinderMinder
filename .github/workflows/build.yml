@@ -1,0 +1,37 @@
+name: Build FinderMinder
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app
+        run: ./build-app.sh
+
+      - name: Zip app
+        run: ditto -c -k --keepParent build/FinderMinder.app FinderMinder.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FinderMinder
+          path: FinderMinder.zip
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" FinderMinder.zip \
+            --target "$GITHUB_SHA" \
+            --title "FinderMinder (build ${{ github.run_number }})" \
+            --latest \
+            --notes "Download **FinderMinder.zip**, unzip it, and move FinderMinder.app to Applications. See the README for first-launch steps."
