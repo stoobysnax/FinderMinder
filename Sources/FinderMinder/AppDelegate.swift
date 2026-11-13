@@ -89,6 +89,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(auto)
         menu.addItem(item("Fit Columns Now", #selector(fitNow)))
 
+        let extraMenu = NSMenu()
+        for points in [0, 12, 24, 36, 48, 64] {
+            let title = points == 0 ? "None (tight fit)" : "\(points) points"
+            let i = item(title, #selector(setExtraWidth(_:)))
+            i.tag = points
+            i.state = Int(fitter.extraWidth) == points ? .on : .off
+            extraMenu.addItem(i)
+        }
+        let extra = NSMenuItem(title: "Extra Width", action: nil, keyEquivalent: "")
+        extra.submenu = extraMenu
+        menu.addItem(extra)
+
         menu.addItem(.separator())
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -140,6 +152,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             alert.informativeText = "\(error.localizedDescription)\n\nMake sure FinderMinder.app is in your Applications folder."
             alert.runModal()
         }
+    }
+
+    @objc private func setExtraWidth(_ sender: NSMenuItem) {
+        fitter.extraWidth = Double(sender.tag)
+        lastSignature = ""
+        watcher.scheduleCheck()
     }
 
     @objc private func resetCalibration() {

@@ -35,6 +35,7 @@ as you allow it.
 | --- | --- |
 | Auto-Fit Column Widths | Turns automatic resizing on or off. |
 | Fit Columns Now | Resizes the frontmost Finder window's columns once. |
+| Extra Width | Adds room after the longest name so badges such as Dropbox's sync check mark aren't cut off. The default is 24 points. |
 | Launch at Login | Starts FinderMinder when you log in. The app must be in /Applications. |
 | Reset Grip Calibration | Searches for the grip position again. |
 | Copy Diagnostics | Copies what FinderMinder sees in the front Finder window to the clipboard. |
