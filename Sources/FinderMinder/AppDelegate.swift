@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let fitter = ColumnFitter()
     private var lastSignature = ""
     private var trustTimer: Timer?
+    private var followUp: DispatchWorkItem?
 
     private let defaults = UserDefaults.standard
     private var autoFit: Bool {
@@ -59,12 +60,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let signature = view.signature
         guard force || signature != lastSignature else { return }
 
-        if fitter.fit(view, pid: pid) {
+        // Finder slides new columns into place and may still be loading the folder
+        // (e.g. from iCloud). Only click once the columns have stopped changing.
+        let frames = view.columns.map(\.frame)
+        usleep(150_000)
+        guard let settled = FinderColumnView.focused(pid: pid),
+              settled.columns.map(\.frame) == frames,
+              settled.signature == signature else {
+            watcher.scheduleCheck(after: 0.25)
+            return
+        }
+
+        if fitter.fit(settled, pid: pid) {
             lastSignature = FinderColumnView.focused(pid: pid)?.signature ?? signature
+            scheduleFollowUp()
         } else {
             // Mouse or modifier key was held; try again shortly.
             watcher.scheduleCheck(after: 0.5)
         }
+    }
+
+    /// A second pass shortly after each fit, to catch columns that finished loading or
+    /// moving after the first pass. Re-fitting a column that already fits changes nothing.
+    private func scheduleFollowUp() {
+        followUp?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, AXIsProcessTrusted(), Finder.isFrontmost,
+                  let pid = Finder.app?.processIdentifier,
+                  !Finder.isEditingText(pid: pid),
+                  let view = FinderColumnView.focused(pid: pid) else { return }
+            if self.fitter.fit(view, pid: pid) {
+                self.lastSignature = FinderColumnView.focused(pid: pid)?.signature ?? view.signature
+            }
+        }
+        followUp = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: work)
     }
 
     // MARK: - Menu
