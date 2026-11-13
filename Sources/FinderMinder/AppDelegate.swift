@@ -89,6 +89,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(auto)
         menu.addItem(item("Fit Columns Now", #selector(fitNow)))
 
+        let methodMenu = NSMenu()
+        let smooth = item("Measure and Resize (uses Extra / Minimum Width)", #selector(setMethod(_:)))
+        smooth.tag = 0
+        smooth.state = fitter.useOptionDoubleClick ? .off : .on
+        methodMenu.addItem(smooth)
+        let option = item("Option-Double-Click (Finder's own fit)", #selector(setMethod(_:)))
+        option.tag = 1
+        option.state = fitter.useOptionDoubleClick ? .on : .off
+        methodMenu.addItem(option)
+        let method = NSMenuItem(title: "Resize Method", action: nil, keyEquivalent: "")
+        method.submenu = methodMenu
+        menu.addItem(method)
+
         let extraMenu = NSMenu()
         for points in [0, 12, 24, 36, 48, 64] {
             let title = points == 0 ? "None (tight fit)" : "\(points) points"
@@ -167,6 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func setExtraWidth(_ sender: NSMenuItem) {
         fitter.extraWidth = Double(sender.tag)
+        lastSignature = ""
+        watcher.scheduleCheck()
+    }
+
+    @objc private func setMethod(_ sender: NSMenuItem) {
+        fitter.useOptionDoubleClick = sender.tag == 1
         lastSignature = ""
         watcher.scheduleCheck()
     }

@@ -17,6 +17,14 @@ final class ColumnFitter {
         static let extraWidth = "ExtraWidth"
         static let minimumWidth = "MinimumWidth"
         static let trailing = "TrailingPadding"
+        static let optionDoubleClick = "UseOptionDoubleClick"
+    }
+
+    /// Simple mode: one Option-double-click on a grip, which makes Finder right-size
+    /// all columns itself. No extra width or minimum width in this mode.
+    var useOptionDoubleClick: Bool {
+        get { defaults.bool(forKey: Key.optionDoubleClick) }
+        set { defaults.set(newValue, forKey: Key.optionDoubleClick) }
     }
 
     /// Space Finder leaves after the longest name in a right-sized column (chevron etc.).
@@ -90,6 +98,11 @@ final class ColumnFitter {
             }
         }
 
+        if useOptionDoubleClick {
+            optionDoubleClick(view, pid: pid)
+            return true
+        }
+
         var triedCalibration = false
         // Right to left: resizing a column only shifts the columns to its right,
         // which have already been handled. Frames are re-read every time anyway.
@@ -112,6 +125,19 @@ final class ColumnFitter {
             usleep(20_000)
         }
         return true
+    }
+
+    /// Option-double-clicks the grip of the rightmost visible column.
+    private func optionDoubleClick(_ view: FinderColumnView, pid: pid_t) {
+        let offset = calibratedOffset ?? Self.candidates[0]
+        for column in view.columns.reversed() {
+            guard let frame = column.element.frame else { continue }
+            let point = CGPoint(x: frame.maxX + offset.dx, y: frame.maxY + offset.dy)
+            guard view.browserFrame.insetBy(dx: 1, dy: 1).contains(point),
+                  isSafeTarget(point, browser: view.browser, pid: pid) else { continue }
+            doubleClick(at: point, flags: .maskAlternate)
+            return
+        }
     }
 
     /// Distance from the column's left edge to the end of its longest name, measured
@@ -253,12 +279,12 @@ final class ColumnFitter {
         post(.leftMouseUp, end)
     }
 
-    private func doubleClick(at point: CGPoint) {
+    private func doubleClick(at point: CGPoint, flags: CGEventFlags = []) {
         let source = CGEventSource(stateID: .hidSystemState)
         func post(_ type: CGEventType, clickState: Int64) {
             guard let e = CGEvent(mouseEventSource: source, mouseType: type,
                                   mouseCursorPosition: point, mouseButton: .left) else { return }
-            e.flags = []
+            e.flags = flags
             e.setIntegerValueField(.mouseEventClickState, value: clickState)
             e.post(tap: .cghidEventTap)
         }
