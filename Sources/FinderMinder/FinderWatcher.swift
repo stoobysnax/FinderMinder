@@ -18,7 +18,7 @@ final class FinderWatcher {
         kAXFocusedUIElementChangedNotification,
         kAXSelectedChildrenChangedNotification,
         kAXSelectedRowsChangedNotification,
-        kAXUIElementCreatedNotification,
+        kAXCreatedNotification,
         kAXTitleChangedNotification,
     ]
 

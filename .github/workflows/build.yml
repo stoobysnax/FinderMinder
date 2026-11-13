@@ -9,11 +9,6 @@ permissions:
   contents: write
 
 jobs:
-  runner-check:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Linux runner works"
-
   build:
     runs-on: macos-latest
     steps:
