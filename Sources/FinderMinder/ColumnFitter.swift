@@ -1,8 +1,12 @@
 import AppKit
 import ApplicationServices
 
-/// Resizes Finder columns by double-clicking each column's resize grip — the same
-/// thing you'd do by hand — which makes Finder size the column to its longest name.
+/// Resizes Finder columns to fit their longest name.
+///
+/// It measures the names itself and then makes one drag of each column's resize grip
+/// straight to the final width, so a column moves at most once and columns that are
+/// already right don't move at all. Finder's own "right-size" double-click is used only
+/// once, to learn where the grip is and how much space Finder leaves after a name.
 final class ColumnFitter {
     private let defaults = UserDefaults.standard
 
@@ -12,6 +16,22 @@ final class ColumnFitter {
         static let dy = "GripOffsetY"
         static let extraWidth = "ExtraWidth"
         static let minimumWidth = "MinimumWidth"
+        static let trailing = "TrailingPadding"
+    }
+
+    /// Space Finder leaves after the longest name in a right-sized column (chevron etc.).
+    /// Learned once; this is only the fallback.
+    static let defaultTrailing: Double = 28
+
+    private var trailingPadding: Double? {
+        defaults.object(forKey: Key.trailing) as? Double
+    }
+
+    private func learnTrailing(fittedWidth: CGFloat, content: CGFloat) {
+        let t = Double(fittedWidth - content)
+        guard (0...150).contains(t) else { return }
+        defaults.set(t, forKey: Key.trailing)
+        NSLog("FinderMinder: trailing padding \(t)")
     }
 
     /// Extra points added after Finder's tight fit, so badges after the name
@@ -52,6 +72,7 @@ final class ColumnFitter {
         defaults.removeObject(forKey: Key.calibrated)
         defaults.removeObject(forKey: Key.dx)
         defaults.removeObject(forKey: Key.dy)
+        defaults.removeObject(forKey: Key.trailing)
     }
 
     /// Returns false if it had to back off (e.g. the user is holding the mouse or a modifier key).
@@ -73,23 +94,85 @@ final class ColumnFitter {
         // Right to left: resizing a column only shifts the columns to its right,
         // which have already been handled. Frames are re-read every time anyway.
         for column in view.columns.reversed() {
-            var fitted = false
-            if let offset = calibratedOffset {
-                fitted = clickGrip(of: column, offset: offset, in: view, pid: pid)
-            } else if !triedCalibration {
+            if calibratedOffset == nil {
+                guard !triedCalibration else { continue }
                 triedCalibration = true
                 calibrate(on: column, in: view, pid: pid)
-                fitted = calibratedOffset != nil
-            } else {
-                _ = clickGrip(of: column, offset: Self.candidates[0], in: view, pid: pid)
             }
-            if fitted, let offset = calibratedOffset {
-                usleep(60_000)
-                widen(column, offset: offset, in: view, pid: pid)
+            guard let offset = calibratedOffset else { continue }
+
+            let content = contentWidth(of: column)
+            if trailingPadding == nil, let content,
+               clickGrip(of: column, offset: offset, in: view, pid: pid) {
+                // One time only: let Finder fit this column tightly to learn its spacing.
+                usleep(150_000)
+                if let w = column.element.frame?.width { learnTrailing(fittedWidth: w, content: content) }
             }
-            usleep(30_000)
+            resize(column, content: content, offset: offset, in: view, pid: pid)
+            usleep(20_000)
         }
         return true
+    }
+
+    /// Distance from the column's left edge to the end of its longest name, measured
+    /// in the font Finder is using. Nil for an empty column.
+    private func contentWidth(of column: FinderColumn) -> CGFloat? {
+        guard let colFrame = column.element.frame else { return nil }
+        var rows = column.list.elements(kAXRowsAttribute)
+        if rows.isEmpty { rows = column.list.children }
+
+        let textRoles: Set<String> = [kAXTextFieldRole, kAXStaticTextRole]
+        var font: NSFont?
+        var textLeft: CGFloat?
+        var widest: CGFloat = 0
+        for row in rows.prefix(400) {
+            guard let text = row.firstDescendant(maxDepth: 4, limit: 30, where: { textRoles.contains($0.role ?? "") }),
+                  let name = text.string(kAXValueAttribute), !name.isEmpty else { continue }
+            let f = font ?? Self.font(of: text)
+            font = f
+            if textLeft == nil, let tf = text.frame { textLeft = tf.minX - colFrame.minX }
+            widest = max(widest, (name as NSString).size(withAttributes: [.font: f]).width)
+        }
+        guard let textLeft, widest > 0 else { return nil }
+        return textLeft + ceil(widest)
+    }
+
+    /// The font of a file name in Finder's list, read through Accessibility.
+    private static func font(of text: AXUIElement) -> NSFont {
+        var range = CFRange(location: 0, length: 1)
+        if let rangeValue = AXValueCreate(.cfRange, &range) {
+            var out: CFTypeRef?
+            if AXUIElementCopyParameterizedAttributeValue(
+                text, kAXAttributedStringForRangeParameterizedAttribute as CFString, rangeValue, &out) == .success,
+               let attributed = out as? NSAttributedString, attributed.length > 0,
+               let info = attributed.attribute(NSAttributedString.Key("AXFont"), at: 0, effectiveRange: nil) as? [String: Any],
+               let size = info["AXFontSize"] as? NSNumber {
+                let pointSize = CGFloat(size.doubleValue)
+                if let name = info["AXFontName"] as? String, let f = NSFont(name: name, size: pointSize) { return f }
+                return NSFont.systemFont(ofSize: pointSize)
+            }
+        }
+        // Fallback: estimate the size from the height of the text.
+        let height = text.frame?.height ?? 16
+        return NSFont.systemFont(ofSize: max(10, (height / 1.21).rounded()))
+    }
+
+    /// One drag of the grip straight to the final width; nothing if already close.
+    private func resize(_ column: FinderColumn, content: CGFloat?, offset: CGVector,
+                        in view: FinderColumnView, pid: pid_t) {
+        guard let frame = column.element.frame else { return }
+        var target = frame.width
+        if let content {
+            target = content + CGFloat(trailingPadding ?? Self.defaultTrailing) + CGFloat(extraWidth)
+        }
+        target = max(target, CGFloat(minimumWidth))
+        let delta = target - frame.width
+        guard abs(delta) >= 2 else { return }
+
+        let start = CGPoint(x: frame.maxX + offset.dx, y: frame.maxY + offset.dy)
+        guard view.browserFrame.insetBy(dx: 1, dy: 1).contains(start),
+              isSafeTarget(start, browser: view.browser, pid: pid) else { return }
+        drag(from: start, to: CGPoint(x: start.x + delta, y: start.y))
     }
 
     private func calibrate(on column: FinderColumn, in view: FinderColumnView, pid: pid_t) {
@@ -102,6 +185,9 @@ final class ColumnFitter {
                 defaults.set(Double(offset.dx), forKey: Key.dx)
                 defaults.set(Double(offset.dy), forKey: Key.dy)
                 NSLog("FinderMinder: grip found at offset (\(offset.dx), \(offset.dy))")
+                if let content = contentWidth(of: column) {
+                    learnTrailing(fittedWidth: after.width, content: content)
+                }
                 return
             }
         }
@@ -115,21 +201,6 @@ final class ColumnFitter {
               isSafeTarget(point, browser: view.browser, pid: pid) else { return false }
         doubleClick(at: point)
         return true
-    }
-
-    /// Drags the column's grip to the right, after Finder's tight fit.
-    /// Grows a just-fitted column to (fitted width + extra width), or to the minimum
-    /// width if that is larger, by dragging its grip to the right.
-    private func widen(_ column: FinderColumn, offset: CGVector,
-                       in view: FinderColumnView, pid: pid_t) {
-        guard let frame = column.element.frame else { return }
-        let target = max(frame.width + extraWidth, minimumWidth)
-        let extra = target - frame.width
-        guard extra > 0.5 else { return }
-        let start = CGPoint(x: frame.maxX + offset.dx, y: frame.maxY + offset.dy)
-        guard view.browserFrame.insetBy(dx: 1, dy: 1).contains(start),
-              isSafeTarget(start, browser: view.browser, pid: pid) else { return }
-        drag(from: start, to: CGPoint(x: start.x + extra, y: start.y))
     }
 
     /// Never double-click on something that could open a file or press a control:

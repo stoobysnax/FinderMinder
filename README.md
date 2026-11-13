@@ -4,9 +4,10 @@ A small macOS menu bar app that keeps Finder's **column view** columns wide
 enough to show long file names in full.
 
 Whenever you open a folder or move around in a column-view window, FinderMinder
-right-sizes each visible column to fit its longest name. It does this the same way you
-would by hand: it double-clicks the small resize grip (‖) at the bottom of each column
-divider. Then it puts your mouse pointer back where it was.
+sizes each visible column to fit its longest name, plus some room for badges such as
+Dropbox's check mark. It measures the names in Finder's font, then drags each column's
+resize grip (‖) once, straight to the right width. Columns that are already right don't
+move. Then it puts your mouse pointer back where it was.
 
 ## Build and install
 
@@ -50,8 +51,9 @@ as you allow it.
 - Before every click, it asks Accessibility which element is under that point. It clicks only
   when that point is inside Finder's column browser and not on a file, name, icon, button or
   scroll bar. So it never opens a file by mistake.
-- The first time it runs, it tries a few spots near the bottom of the column divider. When one
-  of them resizes a column, it saves that position and uses it from then on.
+- The first time it runs, it double-clicks near the bottom of a column divider to find the
+  grip, and to learn how much space Finder leaves after a name. It saves both and doesn't
+  double-click again.
 
 ## Troubleshooting
 
