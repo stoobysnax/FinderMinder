@@ -101,6 +101,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         extra.submenu = extraMenu
         menu.addItem(extra)
 
+        let minMenu = NSMenu()
+        for (title, points) in [("Tight", 0.0), ("Wider", ColumnFitter.widerMinimum)] {
+            let i = item(title, #selector(setMinimumWidth(_:)))
+            i.tag = Int(points)
+            i.state = fitter.minimumWidth == points ? .on : .off
+            minMenu.addItem(i)
+        }
+        let minItem = NSMenuItem(title: "Minimum Width", action: nil, keyEquivalent: "")
+        minItem.submenu = minMenu
+        menu.addItem(minItem)
+
         menu.addItem(.separator())
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -156,6 +167,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func setExtraWidth(_ sender: NSMenuItem) {
         fitter.extraWidth = Double(sender.tag)
+        lastSignature = ""
+        watcher.scheduleCheck()
+    }
+
+    @objc private func setMinimumWidth(_ sender: NSMenuItem) {
+        fitter.minimumWidth = Double(sender.tag)
         lastSignature = ""
         watcher.scheduleCheck()
     }

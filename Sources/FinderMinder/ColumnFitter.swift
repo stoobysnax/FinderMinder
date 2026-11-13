@@ -11,11 +11,21 @@ final class ColumnFitter {
         static let dx = "GripOffsetX"
         static let dy = "GripOffsetY"
         static let extraWidth = "ExtraWidth"
+        static let minimumWidth = "MinimumWidth"
     }
 
     /// Extra points added after Finder's tight fit, so badges after the name
     /// (e.g. Dropbox's sync check mark) aren't clipped.
     static let defaultExtraWidth: Double = 24
+
+    /// "Wider" mode: columns never end up narrower than this.
+    static let widerMinimum: Double = 250
+
+    /// 0 means "Tight" (no minimum).
+    var minimumWidth: Double {
+        get { defaults.object(forKey: Key.minimumWidth) as? Double ?? 0 }
+        set { defaults.set(newValue, forKey: Key.minimumWidth) }
+    }
 
     var extraWidth: Double {
         get { defaults.object(forKey: Key.extraWidth) as? Double ?? Self.defaultExtraWidth }
@@ -73,9 +83,9 @@ final class ColumnFitter {
             } else {
                 _ = clickGrip(of: column, offset: Self.candidates[0], in: view, pid: pid)
             }
-            if fitted, let offset = calibratedOffset, extraWidth > 0 {
+            if fitted, let offset = calibratedOffset {
                 usleep(60_000)
-                widen(column, by: extraWidth, offset: offset, in: view, pid: pid)
+                widen(column, offset: offset, in: view, pid: pid)
             }
             usleep(30_000)
         }
@@ -108,9 +118,14 @@ final class ColumnFitter {
     }
 
     /// Drags the column's grip to the right, after Finder's tight fit.
-    private func widen(_ column: FinderColumn, by extra: Double, offset: CGVector,
+    /// Grows a just-fitted column to (fitted width + extra width), or to the minimum
+    /// width if that is larger, by dragging its grip to the right.
+    private func widen(_ column: FinderColumn, offset: CGVector,
                        in view: FinderColumnView, pid: pid_t) {
         guard let frame = column.element.frame else { return }
+        let target = max(frame.width + extraWidth, minimumWidth)
+        let extra = target - frame.width
+        guard extra > 0.5 else { return }
         let start = CGPoint(x: frame.maxX + offset.dx, y: frame.maxY + offset.dy)
         guard view.browserFrame.insetBy(dx: 1, dy: 1).contains(start),
               isSafeTarget(start, browser: view.browser, pid: pid) else { return }
